@@ -1,0 +1,42 @@
+Brand setup and posting: see `brand.py` and `publish.py`. Brand files, posts, data and renders live in `brands/<slug>/`, so older paths below mean that folder.
+
+# Falcon (FocusComet content engine)
+
+Working name Falcon. Current state and next steps: `../HANDOVER.md`.
+
+A self-run version of what Fastlane does: find what already works, copy the format (never the words or media),
+write a FocusComet version, check it, render it for Instagram and TikTok, and queue it for review.
+
+## Use it
+    cd reels-pipeline/content-engine
+    ../.venv/bin/python server.py            # dashboard at http://localhost:8787
+    ../.venv/bin/python run.py daily --n 2   # the daily run: refresh, write 2 posts, gate, render
+
+Dashboard tabs: **Planned posts** (status, scores, IG/TikTok slides, caption, Approve/Skip/Rework),
+**Competitor ads** (longest-running active ads, Remix), **Trending** (this week's outlier posts as live Instagram
+embeds, Remix). **Refresh** re-pulls tabs 2 and 3; **Make 2 posts** does the full daily run.
+
+## Pipeline
+| step | file | what |
+|---|---|---|
+| find | find.py, seeds.json | outlier Reels (views / account median) and carousels/images ((likes + 4 x comments) / account median) from seed accounts, Instagram Graph API; political posts skipped |
+| tiktok | tiktok.py | this week's top US TikTok hashtags across ALL categories (Discovery API), their top videos, and a Sonnet judge (from video frames) on whether FocusComet can join each trend (fit, brand safety, our version). TikTok blocks downloads from the terminal, so Claude captures frames in Chrome for the judge |
+| engagement | engagement.py | reposts (Instagram) and saves + shares (TikTok) read from public pages in Chrome during a session; trending is re-ranked by share rate |
+| calendar | calendar_plan.py | ready posts into 12:30pm / 7:30pm ET slots: one per angle group a week, no format twice in a row, videos in the evening |
+| competitors | competitors.py | competitor ads by days running (Ad Library); top 20 videos kept in data/ad_media via yt-dlp |
+| write | write.py, brand.md, llm.py | Claude Opus 5.5 (`claude -p`, Mit's subscription) writes from a source; brand.md is the only source of facts; Claude Sonnet 5.5 judges |
+| gate | gate.py | hook >= 62, human >= 70, banned claims, slide length, and a Sonnet judge (sounds human, clear, claims true, save/share >= 7). A post whose angle repeats one in the review queue (ready/approved, last 14 days) fails too. Fails are rewritten up to 3 times, else "held" with reasons |
+| photos | photos.py | Pixabay (real stock first), picked per slide by Sonnet; Pexels by hand via Chrome |
+| render | render.py | HyperFrames: essay, tweet, statement, quote, slideshow, caption; 1080x1350 and --tiktok 1080x1920 |
+
+Nothing is posted. "ready" means it passed every check and waits for Mit.
+
+## Keys (reels-pipeline/.env)
+META_IG_TOKEN (Instagram Graph API, long-lived, expires ~late Dec 2026), PIXABAY_KEY, TIKTOK_APP_ID and TIKTOK_APP_SECRET (pasted by Mit), TIKTOK_TOKEN and TIKTOK_ADVERTISER_ID (written by `tiktok.py auth` or the dashboard's /tiktok/callback). Gemini is reserved for Omni video generation; the engine itself uses only Claude (Opus writes, Sonnet judges). The writer uses the Claude subscription via the `claude` CLI, so it counts against plan usage.
+
+## Known limits
+- Competitor ads refresh automatically only after Mit's one-time ID check (facebook.com/ID) unlocks the Ad Library
+  API; until then they are collected in Claude's session.
+- TikTok's Discovery API gives trending hashtags and video links, not counts; saves/shares come from the Chrome pass, which needs a Claude session. Posting needs app review; TikTok versions are for manual upload.
+- Instagram never shows other accounts' saves or shares (API or web). Reposts are the public share signal.
+- No check here predicts views. Real results (saves, shares, reach) should replace the gate's judgment over time.
